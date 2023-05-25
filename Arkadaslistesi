@@ -1,0 +1,1098 @@
+using MySql.Data.MySqlClient;
+using Org.BouncyCastle.Math.Field;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Data.SqlClient;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO.Ports;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Security.Policy;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using System.Xml.Linq;
+
+namespace RangeonLauncher
+{
+    public partial class MainScreen : Form
+    {
+        public MainScreen()
+        {
+            InitializeComponent();
+            _backgroundWorker = new BackgroundWorker();
+            _backgroundWorker.DoWork += new DoWorkEventHandler(OnDoWork);
+            _backgroundWorker.WorkerSupportsCancellation = true;
+            _proc = HookCallback;
+            _hookID = SetHook(_proc);
+        }
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern IntPtr GetModuleHandle(string lpModuleName);
+        private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+        private const int WH_MOUSE_LL = 14;
+        private const int WM_LBUTTONDOWN = 0x0201;
+        private const int WM_RBUTTONDOWN = 0x0204;
+        private LowLevelMouseProc _proc;
+        private IntPtr _hookID = IntPtr.Zero;
+        private IntPtr SetHook(LowLevelMouseProc proc)
+        {
+            using (Process curProcess = Process.GetCurrentProcess())
+            using (ProcessModule curModule = curProcess.MainModule)
+            {
+                return SetWindowsHookEx(WH_MOUSE_LL, proc, GetModuleHandle(curModule.ModuleName), 0);
+            }
+        }
+        private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+        {
+            if (!isMessageBoxOpen && nCode >= 0 && (wParam == (IntPtr)WM_LBUTTONDOWN || wParam == (IntPtr)WM_RBUTTONDOWN))
+            {
+                isMessageBoxOpen = true;
+                if (!this.Bounds.Contains(Cursor.Position))
+                {
+                    FormuKapat = true;
+                }
+                isMessageBoxOpen = false;
+            }
+            return CallNextHookEx(_hookID, nCode, wParam, lParam);
+        }
+        private async void OnDoWork(object sender, DoWorkEventArgs e)
+        {
+            ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.Visible = false; });
+            while (!_backgroundWorker.CancellationPending)
+            {
+                await Task.Run(() =>
+                {
+                    KacIstegimVar();
+                    ArkadasListem();
+                });
+                if (ArkadaslarimPanel.InvokeRequired)
+                {
+                    ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.Visible = true; });
+                    ArkadaslarimPanel.Invoke((MethodInvoker)delegate { MesajlarSohbetPanel.Visible = true; });
+                }
+                else
+                {
+                    ArkadaslarimPanel.Visible = true;
+                    MesajlarSohbetPanel.Visible = true;
+                }
+                if (MesajlarimPanel.InvokeRequired)
+                {
+                    MesajlarimPanel.Invoke((MethodInvoker)delegate { MesajlarimPanel.VerticalScroll.Value = MesajlarimPanel.VerticalScroll.Maximum; });
+                }
+                else
+                {
+                    MesajlarimPanel.VerticalScroll.Value = MesajlarimPanel.VerticalScroll.Maximum;
+                }
+                await Task.Delay(1000);
+            }
+            e.Cancel = true;
+        }
+        private BackgroundWorker _backgroundWorker;
+        public string Username;
+        private new int Move;
+        int Mouse_X;
+        int Mouse_Y;
+        string server = "78.135.83.151";
+        string database = "rangeoncomtr_admin";
+        string username = "rangeoncomtr_admin";
+        string password = "4Q}BbL[+WOZ4";
+        public static int ParamentX, ParamentY;
+        private double opacity = 0.0;
+        public static bool FormuKapat = false;
+        private bool isMessageBoxOpen = false;
+        public static bool MesajAcik = false;
+        string labelText;
+        string name;
+        string Durum;
+        List<Panel> cevrimiciArkadaslar = new List<Panel>();
+        List<Panel> arkadasPanelList = new List<Panel>();
+        List<Panel> cevrimdisiArkadaslar = new List<Panel>();
+        public void ArkadasListem()
+        {
+            string connectionString = "SERVER=" + server + ";" + "DATABASE=" + database + ";" + "UID=" + username + ";" + "PASSWORD=" + password + ";";
+            ArkadaslarimPanel.SuspendLayout();
+            using (MySqlConnection connection = new MySqlConnection(connectionString))
+            {
+                List<string> sqlVerileri = new List<string>();
+                connection.Open();
+                MySqlCommand command2 = new MySqlCommand("Select *From Arkadasolanlar", connection);
+                MySqlDataReader reader2 = command2.ExecuteReader();
+                while (reader2.Read())
+                {
+                    if (KullaniciAdiLbl.Text == reader2["Kisi"].ToString())
+                    {
+                        name = reader2["Arkadasi"].ToString();
+                    }
+                    else if (KullaniciAdiLbl.Text == reader2["Arkadasi"].ToString())
+                    {
+                        name = reader2["Kisi"].ToString();
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                    using (MySqlConnection connection2 = new MySqlConnection(connectionString))
+                    {
+                        foreach (Control control in ArkadaslarimPanel.Controls)
+                        {
+                            Panel arkadasPanel = (Panel)control;
+                            if (control is Panel)
+                            {
+                                string arkadas = "";
+                                Label durumLabel = null;
+                                try
+                                {
+                                    foreach (Control subControl in arkadasPanel.Controls)
+                                    {
+                                        if (subControl is Label)
+                                        {
+                                            Label label = (Label)subControl;
+                                            if (label.Name == "ArkadasLbl")
+                                            {
+                                                arkadas = label.Text;
+                                            }
+                                            else if (label.Name == "DurumLbl")
+                                            {
+                                                durumLabel = label;
+                                            }
+                                        }
+                                    }
+                                }
+                                catch (Exception)
+                                {
+                                    return;
+                                }
+                                if (!string.IsNullOrEmpty(arkadas) && durumLabel != null)
+                                {
+                                    connection2.Close();
+                                    connection2.Open();
+                                    MySqlCommand command = new MySqlCommand("SELECT Durum FROM Accounts WHERE realname = @realname", connection2);
+                                    command.Parameters.AddWithValue("@realname", arkadas);
+                                    MySqlDataReader reader = command.ExecuteReader();
+                                    while (reader.Read())
+                                    {
+                                        Durum = reader["Durum"].ToString();
+                                        if (durumLabel.InvokeRequired)
+                                        {
+                                            durumLabel.Invoke((MethodInvoker)delegate { durumLabel.Text = Durum; });
+                                        }
+                                        else
+                                        {
+                                            durumLabel.Text = Durum;
+                                        }
+                                        durumLabel.ForeColor = (Durum == "Cevrimici") ? Color.Green : Color.Red;
+                                    }
+                                }
+                            }
+                        }
+                        sqlVerileri.Add(name);
+                        bool varMi = false;
+                        foreach (Panel pnl in ArkadaslarimPanel.Controls)
+                        {
+                            foreach (Label lbl in pnl.Controls)
+                            {
+                                try
+                                {
+                                    if (lbl.Text == name)
+                                    {
+                                        varMi = true;
+                                    }
+                                }
+                                catch (Exception)
+                                {
+                                    return;
+                                }
+                            }
+                        }
+                        if (!varMi)
+                        {
+                            if (ArkadaslarimPanel.InvokeRequired)
+                            {
+                                ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.Visible = false; });
+                            }
+                            else
+                            {
+                                ArkadaslarimPanel.Visible = false;
+                            }
+                            if (ArkadaslarimPanel.InvokeRequired)
+                            {
+                                ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.SuspendLayout(); });
+                            }
+                            else
+                            {
+                                ArkadaslarimPanel.SuspendLayout();
+                            }
+                            Panel panel = new Panel
+                            {
+                                Size = new Size(471, 35),
+                                Dock = DockStyle.Top,
+                                BackColor = Color.FromArgb(64, 64, 64, 64),
+                                Cursor = Cursors.Hand,
+                                Tag = Durum
+                            };
+                            Label ArkadasNameLabel = new Label
+                            {
+                                Name = "ArkadasLbl",
+                                Dock = DockStyle.Top,
+                                Text = name,
+                                AutoSize = true,
+                                ForeColor = Color.Silver,
+                                BackColor = Color.Transparent,
+                                Font = new Font("Microsoft Sans Serif", 12, FontStyle.Bold),
+                                Cursor = Cursors.Hand
+                            };
+                            Label DurumLabeli = new Label
+                            {
+                                Tag = "DurumLbl",
+                                Name = "DurumLbl",
+                                Dock = DockStyle.Bottom,
+                                Text = Durum,
+                                AutoSize = true,
+                                ForeColor = Color.Silver,
+                                BackColor = Color.Transparent,
+                                Font = new Font("Microsoft Sans Serif", 10, FontStyle.Bold),
+                                Cursor = Cursors.Hand
+                            };
+                            panel.Controls.Add(ArkadasNameLabel);
+                            panel.Controls.Add(DurumLabeli);
+                            if (ArkadaslarimPanel.InvokeRequired)
+                            {
+                                ArkadaslarimPanel.Invoke((MethodInvoker)delegate
+                                {
+                                    ArkadaslarimPanel.Controls.Add(panel);
+                                });
+                            }
+                            else
+                            {
+                                ArkadaslarimPanel.Controls.Add(panel);
+                            }
+                            foreach (Control control in ArkadaslarimPanel.Controls)
+                            {
+                                if (control is Panel)
+                                {
+                                    Panel arkadasPanel = (Panel)control;
+                                    arkadasPanelList.Add(arkadasPanel);
+                                }
+                            }
+                            panel.Click += Arkadaslarim_Click;
+                            panel.MouseDown += Label_MouseDown;
+                            panel.MouseLeave += Panel_MouseLeave;
+                            panel.MouseMove += Panel_MouseMove;
+                            ArkadasNameLabel.Click += Arkadaslarim_Click;
+                            ArkadasNameLabel.MouseDown += Label_MouseDown;
+                            ArkadasNameLabel.MouseLeave += Label_MouseLeave;
+                            ArkadasNameLabel.MouseMove += Label_MouseMove;
+                            if (ArkadaslarimPanel.InvokeRequired)
+                            {
+                                ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.ResumeLayout(); });
+                            }
+                            else
+                            {
+                                ArkadaslarimPanel.ResumeLayout();
+                            }
+                        }
+                        try
+                        {
+                            foreach (Panel panel in arkadasPanelList)
+                            {
+                                if (panel.Controls.Find("DurumLbl", true).FirstOrDefault().Text == "Cevrimici")
+                                {
+                                    cevrimiciArkadaslar.Add(panel);
+                                }
+                                else if (panel.Controls.Find("DurumLbl", true).FirstOrDefault().Text == "Cevrimdisi")
+                                {
+                                    cevrimdisiArkadaslar.Add(panel);
+                                }
+                            }
+                        }
+                        catch (Exception)
+                        {
+                            return;
+                        }
+                        try
+                        {
+                            foreach (Panel panel in cevrimdisiArkadaslar)
+                            {
+                                if (ArkadaslarimPanel.InvokeRequired)
+                                {
+                                    ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.SuspendLayout(); });
+                                    ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.Controls.Add(panel); });
+                                    ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.ResumeLayout(); });
+                                }
+                                else
+                                {
+                                    ArkadaslarimPanel.SuspendLayout();
+                                    ArkadaslarimPanel.Controls.Add(panel);
+                                    ArkadaslarimPanel.ResumeLayout();
+                                }
+                            }
+                        }
+                        catch (Exception)
+                        {
+                            return;
+                        }
+                        try
+                        {
+                            foreach (Panel panel in cevrimiciArkadaslar)
+                            {
+                                if (ArkadaslarimPanel.InvokeRequired)
+                                {
+                                    ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.SuspendLayout(); });
+                                    ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.Controls.Add(panel); });
+                                    ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.ResumeLayout(); });
+                                }
+                                else
+                                {
+                                    ArkadaslarimPanel.SuspendLayout();
+                                    ArkadaslarimPanel.Controls.Add(panel);
+                                    ArkadaslarimPanel.ResumeLayout();
+                                }
+                            }
+                        }
+                        catch (Exception)
+                        {
+                            if (ArkadaslarimPanel.InvokeRequired)
+                            {
+                                ArkadaslarimPanel.Invoke((MethodInvoker)delegate 
+                                { 
+                                    ArkadaslarimPanel.Visible = false;
+                                    ArkadaslarimPanel.Controls.Clear();
+                                });
+                            }
+                            else
+                            {
+                                ArkadaslarimPanel.Visible = false;
+                                ArkadaslarimPanel.Controls.Clear();
+                                cevrimiciArkadaslar.Clear();
+                                arkadasPanelList.Clear();
+                                cevrimdisiArkadaslar.Clear();
+                            }
+                            ArkadasListem();
+                        }
+                    }
+                }
+                connection.Close();
+                List<Panel> panelListesi = new List<Panel>();
+                foreach (Control panel in ArkadaslarimPanel.Controls)
+                {
+                    if (panel is Panel)
+                    {
+                        panelListesi.Add((Panel)panel);
+                    }
+                }
+                List<Control> silinecekPanelListesi = new List<Control>();
+                foreach (Control panel in ArkadaslarimPanel.Controls)
+                {
+                    if (panel.Controls.Count > 0)
+                    {
+                        Label label = panel.Controls[0] as Label;
+                        if (label != null && !sqlVerileri.Contains(label.Text))
+                        {
+                            silinecekPanelListesi.Add(panel);
+                        }
+                    }
+                }
+                foreach (Panel panel in silinecekPanelListesi.Cast<Panel>())
+                {
+                    if (ArkadaslarimPanel.InvokeRequired)
+                    {
+                        ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.SuspendLayout(); });
+                        ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.Visible = false; });
+                        panel.Invoke((MethodInvoker)delegate { panel.Controls.Clear(); });
+                        ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.Controls.Remove(panel); });
+                        ArkadaslarimPanel.Invoke((MethodInvoker)delegate { sqlVerileri.Remove(labelText); });
+                        ArkadaslarimPanel.Invoke((MethodInvoker)delegate { panelListesi.Clear(); });
+                        ArkadaslarimPanel.Invoke((MethodInvoker)delegate { cevrimiciArkadaslar.Clear(); });
+                        ArkadaslarimPanel.Invoke((MethodInvoker)delegate { arkadasPanelList.Clear(); });
+                        ArkadaslarimPanel.Invoke((MethodInvoker)delegate { cevrimdisiArkadaslar.Clear(); });
+                        ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.ResumeLayout(); });
+                    }
+                    else
+                    {
+
+                        ArkadaslarimPanel.SuspendLayout();
+                        ArkadaslarimPanel.Visible = false;
+                        panel.Controls.Clear();
+                        ArkadaslarimPanel.Controls.Remove(panel);
+                        sqlVerileri.Remove(labelText);
+                        panelListesi.Clear();
+                        cevrimiciArkadaslar.Clear();
+                        arkadasPanelList.Clear();
+                        cevrimdisiArkadaslar.Clear();
+                        ArkadaslarimPanel.ResumeLayout();
+                    }
+                }
+            }
+            if (ArkadaslikIstegiPanel.InvokeRequired)
+            {
+                ArkadaslarimPanel.Invoke((MethodInvoker)delegate
+                {
+                    ArkadaslarimPanel.ResumeLayout();
+                });
+            }
+            else
+            {
+                ArkadaslarimPanel.ResumeLayout();
+            }
+        }
+        private void Arkadaslarim_Click(object sender, EventArgs e)
+        {
+
+        }
+        private void Label_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (sender is Label)
+            {
+                Label lbl = (Label)sender;
+                if (e.Button == MouseButtons.Right)
+                {
+                    Point mousePosition = this.PointToClient(MousePosition);
+                    int mouseX = mousePosition.X;
+                    int mouseY = mousePosition.Y;
+                    int panelWidth = ArkadasSagTiklamaPanel.Width;
+                    ArkadasSagTiklamaPanel.Location = new Point(mouseX - panelWidth, mouseY);
+                    ArkadasSagTiklamaPanel.Visible = true;
+                    labelText = lbl.Text;
+                }
+            }
+            else if (sender is Panel)
+            {
+                Panel pnl = (Panel)sender;
+                if (e.Button == MouseButtons.Right)
+                {
+                    Point mousePosition = this.PointToClient(MousePosition);
+                    int mouseX = mousePosition.X;
+                    int mouseY = mousePosition.Y;
+                    int panelWidth = ArkadasSagTiklamaPanel.Width;
+                    ArkadasSagTiklamaPanel.Location = new Point(mouseX - panelWidth, mouseY);
+                    ArkadasSagTiklamaPanel.Visible = true;
+                    Label lbl = pnl.Controls.OfType<Label>().FirstOrDefault();
+                    labelText = lbl.Text;
+                }
+            }
+        }
+        private void Panel_MouseLeave(object sender, EventArgs e)
+        {
+            Panel pnl = (Panel)sender;
+            pnl.BackColor = Color.FromArgb(64, 64, 64, 64);
+        }
+        private void Panel_MouseMove(object sender, MouseEventArgs e)
+        {
+            Panel pnl = (Panel)sender;
+            pnl.BackColor = Color.FromArgb(120, 120, 120, 120);
+        }
+        private void Label_MouseMove(object sender, MouseEventArgs e)
+        {
+            Label lbl = (Label)sender;
+            lbl.ForeColor = Color.White;
+        }
+        private void Label_MouseLeave(object sender, EventArgs e)
+        {
+            Label lbl = (Label)sender;
+            lbl.ForeColor = Color.Silver;
+        }
+        public void KacIstegimVar()
+        {
+            string connectionString = "SERVER=" + server + ";" + "DATABASE=" + database + ";" + "UID=" + username + ";" + "PASSWORD=" + password + ";";
+            string stm = "SELECT COUNT(*) FROM Arkadaslikistekleri WHERE Alici='" + Username + "'";
+            using (MySqlConnection connection = new MySqlConnection(connectionString))
+            {
+                connection.Open();
+                MySqlCommand cmd = new MySqlCommand(stm, connection);
+                Int32 count = Convert.ToInt32(cmd.ExecuteScalar());
+                if (count > 0)
+                {
+                    if (this.InvokeRequired)
+                    {
+                        this.Invoke((MethodInvoker)delegate
+                        {
+                            ArkadaslikIstegiLbl.Text = "Arkadaslik Istegi " + count.ToString();
+                            ArkadaslikIstegiPanel.Visible = true;
+                        });
+                    }
+                    else
+                    {
+                        ArkadaslikIstegiLbl.Text = "Arkadaslik Istegi " + count.ToString();
+                        ArkadaslikIstegiPanel.Visible = true;
+                    }
+                }
+                else
+                {
+                    try
+                    {
+                        if (this.InvokeRequired)
+                        {
+                            this.Invoke((MethodInvoker)delegate
+                            {
+                                ArkadaslikIstegiLbl.Text = "Arkadaslik Istegi ";
+                                ArkadaslikIstegiPanel.Visible = false;
+                            });
+                        }
+                        else
+                        {
+                            ArkadaslikIstegiLbl.Text = "Arkadaslik Istegi ";
+                            ArkadaslikIstegiPanel.Visible = false;
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        MessageBox.Show("Beklenmedik bir hata ile karşılaşıldı lütfen launcheri yeniden başlatın!", "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+                connection.Close();
+            }
+        }
+        private async void MainScreen_Load(object sender, EventArgs e)
+        {
+            ArkadaslarimPanel.Invoke((MethodInvoker)delegate { ArkadaslarimPanel.Visible = false; });
+            await Task.Run(() => 
+            {
+                Username = LoginAndRegisterScreen.Username;
+                if (KullaniciAdiLbl.InvokeRequired)
+                {
+                    KullaniciAdiLbl.Invoke((MethodInvoker)delegate { KullaniciAdiLbl.Text = Username.ToString(); });
+                }
+                else
+                {
+                    KullaniciAdiLbl.Text = Username.ToString();
+                }
+                if (!_backgroundWorker.IsBusy)
+                {
+                    _backgroundWorker.RunWorkerAsync();
+                }
+                string connectionString = $"Server={server};Database={database};Uid={username};Pwd={password};";
+                using (MySqlConnection connection = new MySqlConnection(connectionString))
+                {
+                    connection.Open();
+                    string query = "SELECT *FROM Accounts WHERE realname = @RealName";
+                    using (MySqlCommand command = new MySqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@RealName", Username);
+                        using (MySqlDataReader reader = command.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                string credit = reader["credit"].ToString();
+                                KrediLbl.Text = credit;
+                            }
+                        }
+                    }
+                }
+                using (MySqlConnection connection = new MySqlConnection(connectionString))
+                {
+                    connection.Open();
+                    MySqlCommand Komut = new MySqlCommand("Update Accounts set Durum=@Durum where realname=@realname", connection);
+                    Komut.Parameters.AddWithValue("@Durum", "Cevrimici");
+                    Komut.Parameters.AddWithValue("@realname", Username);
+                    Komut.ExecuteNonQuery();
+                    connection.Close();
+                    connection.Open();
+                    MySqlCommand DurumuYazdir = new MySqlCommand("Select *From Accounts Where realname = @realname", connection);
+                    DurumuYazdir.Parameters.AddWithValue("@realname", Username);
+                    MySqlDataReader reader = DurumuYazdir.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        KullanıcıOnlineLbl.Text = reader["Durum"].ToString();
+                    }
+                    connection.Close();
+                }
+                KacIstegimVar();
+                ArkadasListem();
+
+            });
+        }
+        private void OynaLbl_MouseMove(object sender, MouseEventArgs e)
+        {
+            OynaLbl.ForeColor = Color.Silver;
+        }
+        private void OynaLbl_MouseLeave(object sender, EventArgs e)
+        {
+            OynaLbl.ForeColor = Color.White;
+        }
+        private void MainScreen_MouseUp(object sender, MouseEventArgs e)
+        {
+            Move = 0;
+        }
+        private void MainScreen_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (Move == 1)
+            {
+                this.SetDesktopLocation(MousePosition.X - Mouse_X, MousePosition.Y - Mouse_Y);
+            }
+        }
+        private void MainScreen_MouseDown(object sender, MouseEventArgs e)
+        {
+            Move = 1;
+            Mouse_X = e.X;
+            Mouse_Y = e.Y;
+        }
+        private void ArkadasEklePictureBox_Click(object sender, EventArgs e)
+        {
+            FormuKapat = false;
+            Form mainForm = new Form();
+            FriendsAddScreen friendsAddScreen = new FriendsAddScreen();
+            mainForm.StartPosition = FormStartPosition.Manual;
+            mainForm.FormBorderStyle = FormBorderStyle.None;
+            mainForm.Opacity = 0.5;
+            LauncherElipse.BorderRadius = 0;
+            mainForm.BackColor = Color.Black;
+            mainForm.Size = this.Size;
+            mainForm.Location = this.Location;
+            mainForm.ShowInTaskbar = false;
+            mainForm.Show();
+            friendsAddScreen.Owner = mainForm;
+            ParamentX = this.Location.X;
+            ParamentY = this.Location.Y;
+            friendsAddScreen.ShowDialog();
+            mainForm.Dispose();
+            LauncherElipse.BorderRadius = 60;
+        }
+        private void OynaLbl_Click(object sender, EventArgs e)
+        {
+            FormuKapat = false;
+            Form mainForm = new Form();
+            GameModeSelectScreen gameModeSelectScreen = new GameModeSelectScreen();
+            mainForm.StartPosition = FormStartPosition.Manual;
+            mainForm.FormBorderStyle = FormBorderStyle.None;
+            mainForm.Opacity = 0.5;
+            LauncherElipse.BorderRadius = 0;
+            mainForm.BackColor = Color.Black;
+            mainForm.Size = this.Size;
+            mainForm.Location = this.Location;
+            mainForm.ShowInTaskbar = false;
+            mainForm.Show();
+            gameModeSelectScreen.Owner = mainForm;
+            ParamentX = this.Location.X;
+            ParamentY = this.Location.Y;
+            gameModeSelectScreen.ShowDialog();
+            mainForm.Dispose();
+            LauncherElipse.BorderRadius = 60;
+        }
+        private void ArkadaslikIstegiLbl_Click(object sender, EventArgs e)
+        {
+            FormuKapat = false;
+            Form mainForm = new Form();
+            FriendsinviteScreen friendsinviteScreen = new FriendsinviteScreen();
+            mainForm.StartPosition = FormStartPosition.Manual;
+            mainForm.FormBorderStyle = FormBorderStyle.None;
+            mainForm.Opacity = 0.5;
+            LauncherElipse.BorderRadius = 0;
+            mainForm.BackColor = Color.Black;
+            mainForm.Size = this.Size;
+            mainForm.Location = this.Location;
+            mainForm.ShowInTaskbar = false;
+            mainForm.Show();
+            friendsinviteScreen.Owner = mainForm;
+            ParamentX = this.Location.X;
+            ParamentY = this.Location.Y;
+            friendsinviteScreen.ShowDialog();
+            mainForm.Dispose();
+            LauncherElipse.BorderRadius = 60;
+        }
+        private void MesajlarimPictureBox_Click(object sender, EventArgs e)
+        {
+            if (MesajlarimPanel.Visible == false)
+            {
+                MesajlarimPanel.Visible = true;
+            }
+            else
+            {
+                MesajlarimPanel.Visible = false;
+            }
+        }
+        private void KapatLbl_Click(object sender, EventArgs e)
+        {
+            DialogResult result = MessageBox.Show("Formu kapatmak istediğinize emin misiniz?", "Uyarı", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            string connectionString = $"Server={server};Database={database};Uid={username};Pwd={password};";
+            using (MySqlConnection connection = new MySqlConnection(connectionString))
+            {
+                connection.Open();
+                MySqlCommand Komut = new MySqlCommand("Update Accounts set Durum=@Durum where realname=@realname", connection);
+                Komut.Parameters.AddWithValue("@Durum", "Cevrimdisi");
+                Komut.Parameters.AddWithValue("@realname", Username);
+                Komut.ExecuteNonQuery();
+                connection.Close();
+                KullanıcıOnlineLbl.Text = Durum;
+            }
+            if (result == DialogResult.Yes)
+            {
+                Application.Exit();
+            }
+        }
+        private void KucultLbl_Click(object sender, EventArgs e)
+        {
+            WindowState = FormWindowState.Minimized;
+        }
+        private void KapatLbl_MouseMove(object sender, MouseEventArgs e)
+        {
+            KapatLbl.ForeColor = Color.Silver;
+        }
+        private void KapatLbl_MouseLeave(object sender, EventArgs e)
+        {
+            KapatLbl.ForeColor = Color.White;
+        }
+        private void KucultLbl_MouseMove(object sender, MouseEventArgs e)
+        {
+            KucultLbl.ForeColor = Color.Silver;
+        }
+        private void KucultLbl_MouseLeave(object sender, EventArgs e)
+        {
+            KapatLbl.ForeColor = Color.White;
+        }
+        private void ArkadaslikIstegiPanel_MouseMove(object sender, MouseEventArgs e)
+        {
+            ArkadaslikIstegiPanel.BackColor = Color.FromArgb(30, 61, 118);
+            ArkadaslikIstegiLbl.ForeColor = Color.Olive;
+        }
+        private void ArkadaslikIstegiPanel_MouseLeave(object sender, EventArgs e)
+        {
+            ArkadaslikIstegiPanel.BackColor = Color.FromArgb(6, 61, 118);
+            ArkadaslikIstegiLbl.ForeColor = Color.FromArgb(192, 192, 0);
+        }
+        private void MagazaPictureBox_MouseMove(object sender, MouseEventArgs e)
+        {
+            MagazaPictureBox.BackColor = Color.FromArgb(110, 110, 110, 110);
+            MagazaLbl.Visible = true;
+        }
+        private void MagazaPictureBox_MouseLeave(object sender, EventArgs e)
+        {
+            MagazaPictureBox.BackColor = Color.Transparent;
+            MagazaLbl.Visible = false;
+        }
+        private void WebPictureBox_MouseMove(object sender, MouseEventArgs e)
+        {
+            WebPictureBox.BackColor = Color.FromArgb(110, 110, 110, 110);
+            WebsitesiLbl.Visible = true;
+        }
+        private void WebPictureBox_MouseLeave(object sender, EventArgs e)
+        {
+            WebPictureBox.BackColor = Color.Transparent;
+            WebsitesiLbl.Visible = false;
+        }
+        private void DiscordPictureBox_MouseMove(object sender, MouseEventArgs e)
+        {
+            DiscordPictureBox.BackColor = Color.FromArgb(110, 110, 110, 110);
+            DiscordLbl.Visible = true;
+        }
+        private void DiscordPictureBox_MouseLeave(object sender, EventArgs e)
+        {
+            DiscordPictureBox.BackColor = Color.Transparent;
+            DiscordLbl.Visible = false;
+        }
+        private void CarkPicturebox_MouseMove(object sender, MouseEventArgs e)
+        {
+            CarkPicturebox.BackColor = Color.FromArgb(110, 110, 110, 110);
+            CarkLbl.Visible = true;
+        }
+        private void CarkPicturebox_MouseLeave(object sender, EventArgs e)
+        {
+            CarkPicturebox.BackColor = Color.Transparent;
+            CarkLbl.Visible = false;
+        }
+        private void OturumKapatPictureBox_MouseMove(object sender, MouseEventArgs e)
+        {
+            OturumKapatPictureBox.BackColor = Color.FromArgb(110, 110, 110, 110);
+        }
+        private void OturumKapatPictureBox_MouseLeave(object sender, EventArgs e)
+        {
+            OturumKapatPictureBox.BackColor = Color.Transparent;
+        }
+        private void MesajlarimPictureBox_MouseMove(object sender, MouseEventArgs e)
+        {
+            MesajlarimPictureBox.BackColor = Color.FromArgb(110, 110, 110, 110);
+        }
+        private void MesajlarimPictureBox_MouseLeave(object sender, EventArgs e)
+        {
+            MesajlarimPictureBox.BackColor = Color.Transparent;
+        }
+        private void İnfoPictureBox_MouseMove(object sender, MouseEventArgs e)
+        {
+            İnfoPictureBox.BackColor = Color.FromArgb(110, 110, 110, 110);
+        }
+        private void İnfoPictureBox_MouseLeave(object sender, EventArgs e)
+        {
+            İnfoPictureBox.BackColor = Color.Transparent;
+        }
+        private void DiscordPictureBox_Click(object sender, EventArgs e)
+        {
+            System.Diagnostics.Process.Start("https://discord.gg/eKXbnPKbGh");
+        }
+        private void WebPictureBox_Click(object sender, EventArgs e)
+        {
+            System.Diagnostics.Process.Start("https://rangeon.com.tr/");
+        }
+        private void MagazaPictureBox_Click(object sender, EventArgs e)
+        {
+            System.Diagnostics.Process.Start("https://rangeon.com.tr/magaza");
+        }
+        private void OturumKapatPictureBox_Click(object sender, EventArgs e)
+        {
+            LoginAndRegisterScreen loginAndRegisterScreen = new LoginAndRegisterScreen();
+            loginAndRegisterScreen.Show();
+            Hide();
+        }
+        private void İnfoPictureBox_Click(object sender, EventArgs e)
+        {
+            FormuKapat = false;
+            Form mainForm = new Form();
+            İnfoScreen infoScreen = new İnfoScreen();
+            mainForm.StartPosition = FormStartPosition.Manual;
+            mainForm.FormBorderStyle = FormBorderStyle.None;
+            mainForm.Opacity = 0.5;
+            LauncherElipse.BorderRadius = 0;
+            mainForm.BackColor = Color.Black;
+            mainForm.Size = this.Size;
+            mainForm.Location = this.Location;
+            mainForm.ShowInTaskbar = false;
+            mainForm.Show();
+            infoScreen.Owner = mainForm;
+            ParamentX = this.Location.X;
+            ParamentY = this.Location.Y;
+            infoScreen.ShowDialog();
+            mainForm.Dispose();
+            LauncherElipse.BorderRadius = 60;
+        }
+        private void AyarlarPictureBox_Click(object sender, EventArgs e)
+        {
+            FormuKapat = false;
+            Form mainForm = new Form();
+            SettingsScreen settingsScreen = new SettingsScreen();
+            mainForm.StartPosition = FormStartPosition.Manual;
+            mainForm.FormBorderStyle = FormBorderStyle.None;
+            mainForm.Opacity = 0.5;
+            LauncherElipse.BorderRadius = 0;
+            mainForm.BackColor = Color.Black;
+            mainForm.Size = this.Size;
+            mainForm.Location = this.Location;
+            mainForm.ShowInTaskbar = false;
+            mainForm.Show();
+            settingsScreen.Owner = mainForm;
+            ParamentX = this.Location.X;
+            ParamentY = this.Location.Y;
+            settingsScreen.ShowDialog();
+            mainForm.Dispose();
+            LauncherElipse.BorderRadius = 60;
+        }
+        private void ArkadasListesindenCikarLbl_Click(object sender, EventArgs e)
+        {
+            ArkadasliktanCikar();
+        }
+        public void ArkadasliktanCikar()
+        {
+            string connectionString = "SERVER=" + server + ";" + "DATABASE=" + database + ";" + "UID=" + username + ";" + "PASSWORD=" + password + ";";
+            ArkadasSagTiklamaPanel.Visible = false;
+            using (MySqlConnection connection = new MySqlConnection(connectionString))
+            {
+                connection.Open();
+                MySqlCommand Command = new MySqlCommand("DELETE FROM Arkadasolanlar WHERE Kisi = @Kisi and Arkadasi = @Arkadasi", connection);
+                Command.Parameters.AddWithValue("@Kisi", Username);
+                Command.Parameters.AddWithValue("@Arkadasi", labelText);
+                Command.ExecuteNonQuery();
+                connection.Close();
+                connection.Open();
+                MySqlCommand Command2 = new MySqlCommand("DELETE FROM Arkadasolanlar WHERE Kisi = @Kisi and Arkadasi = @Arkadasi", connection);
+                Command2.Parameters.AddWithValue("@Arkadasi", Username);
+                Command2.Parameters.AddWithValue("@Kisi", labelText);
+                Command2.ExecuteNonQuery();
+                connection.Close();
+                foreach (Control control in ArkadaslarimPanel.Controls)
+                {
+                    if (control is Panel)
+                    {
+                        Panel arkadasPanel = (Panel)control;
+                        string arkadas = "";
+                        foreach (Control subControl in arkadasPanel.Controls)
+                        {
+                            if (subControl is Label)
+                            {
+                                Label label = (Label)subControl;
+                                if (label.Name == "ArkadasLbl")
+                                {
+                                    arkadas = label.Text;
+                                }
+                            }
+                        }
+                        if (arkadas == labelText)
+                        {
+                            cevrimiciArkadaslar.Clear();
+                            arkadasPanelList.Clear();
+                            cevrimdisiArkadaslar.Clear();
+                        }
+                    }
+                }
+            }
+        }
+        private void MainScreen_Click(object sender, EventArgs e)
+        {
+            ArkadasSagTiklamaPanel.Visible = false;
+        }
+        private void MainScreen_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            //string connectionString = $"Server={server};Database={database};Uid={username};Pwd={password};";
+            //using (MySqlConnection connection = new MySqlConnection(connectionString))
+            //{
+            //    connection.Open();
+            //    MySqlCommand Komut = new MySqlCommand("Update Accounts set Durum=@Durum where realname=@realname", connection);
+            //    Komut.Parameters.AddWithValue("@Durum", "Cevrimdisi");
+            //    Komut.Parameters.AddWithValue("@realname", Username);
+            //    Komut.ExecuteNonQuery();
+            //    connection.Close();
+            //}
+            e.Cancel = false;
+        }
+        List<int> previouslyReceivedMessagesID = new List<int>();
+        private void MesajGonderLbl_Click(object sender, EventArgs e)
+        {
+            MesajlarSohbetPanel.Visible = false;
+            MesajlarSohbetPanel.Controls.Clear();
+            previouslyReceivedMessagesID.Clear();
+            ArkadasSagTiklamaPanel.Visible = false;
+            MesajlarimPanel.Visible = true;
+            MesajGonderAd.Text = labelText.ToString();
+            MesajGonderTıkla();
+            Label KisiLbl = new Label
+            {
+                Location = new Point(0, 15),
+                Text = labelText,
+                AutoSize = true,
+                ForeColor = Color.Silver,
+                BackColor = Color.Transparent,
+                Font = new Font("Microsoft Sans Serif", 12, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            Panel Secim = new Panel
+            {
+                Name = "Secim",
+                Size = new Size(2, 2),
+                BackColor = Color.Yellow,
+                Dock = DockStyle.Right
+            };
+            bool exists = false;
+            foreach (Control c in MesajlarimKisilerPanel.Controls)
+            {
+                c.Controls[1].Visible = false;
+                if (c is Panel && c.Controls[0].Text == KisiLbl.Text)
+                {
+                    exists = true;
+                    c.Controls[1].Visible = true;
+                }
+                if (c is Panel)
+                {
+                    c.Controls[1].Visible = false;
+                    if (c.Controls[0].Text == KisiLbl.Text)
+                    {
+                        c.Controls[1].Visible = true;
+                    }
+                }
+            }
+            if (!exists)
+            {
+                Panel panel2 = new Panel
+                {
+                    Size = new Size(471, 50),
+                    Dock = DockStyle.Top,
+                    BackColor = Color.FromArgb(64, 64, 64, 64),
+                    Cursor = Cursors.Hand
+                };
+                Secim.Visible = true;
+                panel2.Controls.Add(KisiLbl);
+                panel2.Controls.Add(Secim);
+                KisiLbl.Click += Label_Click;
+                panel2.Click += Panel_Click;
+                MesajlarimKisilerPanel.Invoke((MethodInvoker)delegate
+                {
+                    MesajlarimKisilerPanel.Controls.Add(panel2);
+                });
+            }
+        }
+        private void Label_Click(object sender, EventArgs e)
+        {
+            //MesajlarSohbetPanel.Visible = false;
+            ArkadaslarimPanel.SuspendLayout();
+            Label lbl = (Label)sender;
+            MesajGonderAd.Text = lbl.Text;
+            foreach (Control c in MesajlarimKisilerPanel.Controls)
+            {
+                if (c is Panel && c.Controls[0].Text == lbl.Text)
+                {
+                    c.Controls[1].Visible = true;
+                }
+                else if (c is Panel && c.Controls[0].Text != lbl.Text)
+                {
+                    c.Controls[1].Visible = false;
+                }
+            }
+            previouslyReceivedMessagesID.Clear();
+            MesajlarSohbetPanel.Controls.Clear();
+            MesajGonderTıkla();
+            ArkadaslarimPanel.ResumeLayout();
+        }
+        private void Panel_Click(object sender, EventArgs e)
+        {
+            //MesajlarSohbetPanel.Visible = false;
+            ArkadaslarimPanel.SuspendLayout();
+            Panel pnl = (Panel)sender;
+            Label lbl = pnl.Controls.OfType<Label>().FirstOrDefault();
+            MesajGonderAd.Text = lbl.Text;
+            Panel clickedPanel = sender as Panel;
+            foreach (Control c in MesajlarimKisilerPanel.Controls)
+            {
+                if (c is Panel)
+                {
+                    Panel p = c as Panel;
+                    p.Controls["Secim"].Visible = false;
+                }
+            }
+            clickedPanel.Controls["Secim"].Visible = true;
+            previouslyReceivedMessagesID.Clear();
+            MesajlarSohbetPanel.Controls.Clear();
+            MesajGonderTıkla();
+            ArkadaslarimPanel.ResumeLayout();
+        }
+        public void MesajGonderTıkla()
+        {
+            string connectionString = $"Server={server};Database={database};Uid={username};Pwd={password};";
+            string kullaniciAdi = MesajGonderAd.Text;
+            using (MySqlConnection connection = new MySqlConnection(connectionString))
+            {
+                connection.Open();
+                MySqlCommand command = new MySqlCommand("SELECT Durum FROM Accounts WHERE realname = @realname", connection);
+                command.Parameters.AddWithValue("@realname", kullaniciAdi);
+                MySqlDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    string durum = reader["Durum"].ToString();
+                    MesajOnlineDurumLbl.Text = durum;
+                    MesajOnlineDurumLbl.ForeColor = (durum == "Cevrimici") ? Color.Green : Color.Red;
+                }
+            }
+        }
+
+        private void timer1_Tick(object sender, EventArgs e)
+        {
+            if (opacity < 1.0)
+            {
+                opacity += 0.008;
+                this.Opacity = opacity;
+            }
+            else
+            {
+                timer1.Stop();
+            }
+        }
+    }
+}
